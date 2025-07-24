@@ -52,7 +52,7 @@ export PATH="$PATH:${ANDROID_HOME}/platform-tools"
 
 # 8. Accept Android SDK licenses (REQUIRED for sdkmanager to work)
 echo "8. Accepting Android SDK licenses..."
-yes | "${ANDROID_HOME}/cmdline-tools/latest/cmdline-tools/bin/sdkmanager" --licenses
+yes | "${ANDROID_HOME}/cmdline-tools/cmdline-tools/bin/sdkmanager" --licenses
 
 # 9. Install necessary Android SDK components using sdkmanager
 echo "9. Installing Android SDK Platforms, Platform Tools, and Build Tools..."
