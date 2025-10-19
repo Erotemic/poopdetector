@@ -24,8 +24,10 @@ public static class ModelCache
     IProgress<double>? progress = null,
     CancellationToken cancel = default)
     {
+        // If the app bundle ships the requested ONNX, prefer copying it into
+        // writable storage instead of performing any network traffic.
         if (await Utils.PackageResourceAvailable(fileName))
-            return fileName;
+            return await EnsurePackagedCopyAsync(fileName, cancel);
 
         string dir = FileSystem.Current.AppDataDirectory;
         Directory.CreateDirectory(dir);

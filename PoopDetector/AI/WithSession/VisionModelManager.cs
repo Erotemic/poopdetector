@@ -12,41 +12,54 @@ namespace PoopDetector.AI.Vision;
 
 public partial class VisionModelManager : ObservableObject
 {
-    static readonly VisionModelOptions _options = VisionModelOptionsLoader.Load();
-    static readonly IReadOnlyDictionary<ModelTypes, string> _modelFileNames =
-        new Dictionary<ModelTypes, string>
-        {
-            { ModelTypes.YoloxNanoPoop, "yolox_nano_poop_cropped_only_best.onnx" },
-            { ModelTypes.Yolov9ScatSpotter, "yolov9_poop.onnx" },
-            { ModelTypes.YoloxNano, "yolox_nano.onnx" },
-            { ModelTypes.ShitspotterCustomV2, "shitspotter_custom_v2_epoch126.onnx" },
-            { ModelTypes.ShitspotterCustomV5, "shitspotter-custom-v5-epoch_115.onnx" },
-        };
+    sealed record VisionModelDescriptor(
+        string FileName,
+        Func<string, IVision> Factory,
+        string? LegacyUrl = null);
 
-    static readonly IReadOnlyDictionary<ModelTypes, string> _legacyModelUrls =
-        new Dictionary<ModelTypes, string>
+    static readonly VisionModelOptions _options = VisionModelOptionsLoader.Load();
+    static readonly IReadOnlyDictionary<ModelTypes, VisionModelDescriptor> _models =
+        new Dictionary<ModelTypes, VisionModelDescriptor>
         {
             {
                 ModelTypes.YoloxNanoPoop,
-                "https://github.com/mkorzunowicz/poop_models/raw/refs/heads/main/yolox_nano_poop_cropped_only_best.onnx"
+                new VisionModelDescriptor(
+                    "yolox_nano_poop_cropped_only_best.onnx",
+                    path => new YoloX.YoloX(path, 416, 416, YoloXColormap.PoopList),
+                    "https://github.com/mkorzunowicz/poop_models/raw/refs/heads/main/yolox_nano_poop_cropped_only_best.onnx")
             },
             {
                 ModelTypes.Yolov9ScatSpotter,
-                "https://huggingface.co/erotemic/shitspotter-models/resolve/main/models/yolo-v9/shitspotter-simple-v3-run-v06-epoch%3D0032-step%3D000132-trainlosstrain_loss%3D7.603.onnx"
+                new VisionModelDescriptor(
+                    "yolov9_poop.onnx",
+                    path => new Yolov9.Yolov9(path, YoloXColormap.PoopList),
+                    "https://huggingface.co/erotemic/shitspotter-models/resolve/main/models/yolo-v9/shitspotter-simple-v3-run-v06-epoch%3D0032-step%3D000132-trainlosstrain_loss%3D7.603.onnx")
             },
             {
                 ModelTypes.YoloxNano,
-                "https://huggingface.co/yourbucket/yolox_nano.onnx"
+                new VisionModelDescriptor(
+                    "yolox_nano.onnx",
+                    path => new YoloX.YoloX(path, 416, 416, YoloXColormap.ColormapList),
+                    "https://huggingface.co/yourbucket/yolox_nano.onnx")
             },
             {
                 ModelTypes.ShitspotterCustomV2,
-                "https://github.com/Erotemic/poop_models/raw/refs/heads/main/shitspotter_custom_v2_epoch126.onnx"
+                new VisionModelDescriptor(
+                    "shitspotter_custom_v2_epoch126.onnx",
+                    path => new YoloX.YoloX(path, 416, 416, YoloXColormap.PoopList),
+                    "https://github.com/Erotemic/poop_models/raw/refs/heads/main/shitspotter_custom_v2_epoch126.onnx")
             },
             {
                 ModelTypes.ShitspotterCustomV5,
-                "https://raw.githubusercontent.com/Erotemic/poop_models/main/shitspotter-custom-v5-epoch_115.onnx"
+                new VisionModelDescriptor(
+                    "shitspotter-custom-v5-epoch_115.onnx",
+                    path => new YoloX.YoloX(path, 416, 416, YoloXColormap.PoopList),
+                    "https://raw.githubusercontent.com/Erotemic/poop_models/main/shitspotter-custom-v5-epoch_115.onnx")
             }
         };
+
+    static readonly ModelTypes _defaultModelType = ResolveDefaultModelType();
+    public static ModelTypes DefaultModel => _defaultModelType;
 
     // singleton
     public static VisionModelManager Instance { get; } = new();
@@ -76,8 +89,10 @@ public partial class VisionModelManager : ObservableObject
 
         try
         {
+            // Always let the cache decide whether a packaged copy is good enough or
+            // if we need to reach out to the network for a fresh download.
             string localPath = await EnsureModelFileAsync(type, cancel);
-            CurrentModel = CreateVisionWrapper(type, localPath);
+            CurrentModel = GetDescriptor(type).Factory(localPath);
             _cache[type] = CurrentModel;
         }
         catch (Exception ex)
@@ -95,47 +110,27 @@ public partial class VisionModelManager : ObservableObject
     bool _bootstrapped;
     bool _bundledPrepared;
 
+    /// <summary>
+    /// Prepare the default vision model so the shell has something ready when
+    /// the app launches. This honours bundled assets before attempting any
+    /// remote download.
+    /// </summary>
     public async Task EnsureDefaultModelAsync()
     {
         MobileSam = new MobileSam.MobileSam();
-        await EnsureBundledModelsAsync(CancellationToken.None);
         if (_bootstrapped || CurrentModel is not null) return;
-
-        string name = _modelFileNames[ModelTypes.YoloxNanoPoop];
-        string defaultUrl = GetRemoteUrl(ModelTypes.YoloxNanoPoop);
-        string localPath = Path.Combine(FileSystem.Current.AppDataDirectory, name);
-
-        if (!File.Exists(localPath))    // first app launch
-        {
-            IsDownloading = true;
-            DownloadProgress = 0;
-            try
-            {
-                localPath = await ModelCache.GetAsync(
-                    defaultUrl,
-                    name,
-                    new Progress<double>(p => DownloadProgress = p));
-            }
-            catch (Exception ex)
-            {
-                // fallback: stay without a model but keep the app alive
-                RaiseError($"Initial model download failed:\n{ex.Message}");
-                IsDownloading = false;
-                return;
-            }
-            IsDownloading = false;
-        }
-
-        CurrentModel = new YoloX.YoloX(
-            localPath,
-            416, 416,
-            YoloXColormap.PoopList);
-
-        _bootstrapped = true;
+        await EnsureBundledModelsAsync(CancellationToken.None);
+        await ChangeModelAsync(_defaultModelType, CancellationToken.None);
+        _bootstrapped = CurrentModel is not null;
     }
     // --------------  internals  -------------------------------- //
     readonly ConcurrentDictionary<ModelTypes, IVision> _cache = new();
 
+    /// <summary>
+    /// Copy any packaged ONNX files that ship with the app into the app data
+    /// directory so later calls to <see cref="EnsureModelFileAsync"/> can reuse
+    /// them without touching the network.
+    /// </summary>
     async Task EnsureBundledModelsAsync(CancellationToken cancel)
     {
         if (_bundledPrepared)
@@ -162,6 +157,10 @@ public partial class VisionModelManager : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Resolve a usable ONNX file for <paramref name="t"/>. A packaged asset
+    /// wins if it exists; otherwise we download and cache the remote model.
+    /// </summary>
     static async Task<string> EnsureModelFileAsync(ModelTypes t,
                                                    CancellationToken ct)
     {
@@ -169,22 +168,31 @@ public partial class VisionModelManager : ObservableObject
             Instance.DownloadProgress = d);     // pushes into binding
 
         string url = GetRemoteUrl(t);
-        string fileName = _modelFileNames[t];
+        string fileName = GetDescriptor(t).FileName;
         return await ModelCache.GetAsync(url, fileName, p, ct);
     }
 
     static string GetRemoteUrl(ModelTypes type)
     {
-        if (!_modelFileNames.TryGetValue(type, out var fileName))
-            throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown model type.");
-
-        _legacyModelUrls.TryGetValue(type, out var fallback);
-        string? resolved = _options.ResolveRemoteUrl(type.ToString(), fileName, fallback);
+        VisionModelDescriptor descriptor = GetDescriptor(type);
+        string? resolved = _options.ResolveRemoteUrl(type.ToString(), descriptor.FileName, descriptor.LegacyUrl);
 
         if (string.IsNullOrWhiteSpace(resolved))
             throw new InvalidOperationException($"No remote URL configured for model '{type}'.");
 
         return resolved;
+    }
+
+    static ModelTypes ResolveDefaultModelType()
+    {
+        if (!string.IsNullOrWhiteSpace(_options.DefaultModel) &&
+            Enum.TryParse<ModelTypes>(_options.DefaultModel, true, out var configured) &&
+            _models.ContainsKey(configured))
+        {
+            return configured;
+        }
+
+        return ModelTypes.ShitspotterCustomV5;
     }
     public enum Backend
     {
@@ -237,31 +245,10 @@ public partial class VisionModelManager : ObservableObject
             IsDownloading = false;
         }
     }
-    static IVision CreateVisionWrapper(ModelTypes t, string modelPath)
-    {
-        var poopAndYolo = YoloXColormap.PoopList.Concat(
-                              YoloXColormap.ColormapList).ToList();
-
-        return t switch
-        {
-            ModelTypes.YoloxNanoPoop =>
-                new YoloX.YoloX(modelPath, 416, 416, YoloXColormap.PoopList),
-
-            ModelTypes.YoloxNano =>
-                new YoloX.YoloX(modelPath, 416, 416, YoloXColormap.ColormapList),
-
-            ModelTypes.Yolov9ScatSpotter =>
-                new Yolov9.Yolov9(modelPath, YoloXColormap.PoopList),
-
-            ModelTypes.ShitspotterCustomV2 =>
-                new YoloX.YoloX(modelPath, 416, 416, YoloXColormap.PoopList),
-
-            ModelTypes.ShitspotterCustomV5 =>
-                new YoloX.YoloX(modelPath, 416, 416, YoloXColormap.PoopList),
-
-            _ => throw new ArgumentOutOfRangeException()
-        };
-    }
+    static VisionModelDescriptor GetDescriptor(ModelTypes type) =>
+        _models.TryGetValue(type, out var descriptor)
+            ? descriptor
+            : throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown model type.");
 
     /// <summary>
     /// Raised whenever downloading or reading a model fails.
