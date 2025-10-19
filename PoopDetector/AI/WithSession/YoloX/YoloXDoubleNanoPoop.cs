@@ -15,7 +15,9 @@ public class YoloXDoubleNanoPoop
     public const string Identifier = "YoloXNano";
     public const string ModelFilename = "yolox_nano.onnx";
     public const string Identifier2 = "YoloXNanoPoop";
-    public const string ModelFilename2 = "yolox_nano_poop_cropped_only_best.onnx";
+    //public const string ModelFilename2 = "yolox_nano_poop_cropped_only_best.onnx";
+    public const string ModelFilename2 = "shitspotter_custom_v2_epoch126.onnx";
+    
     public const int FeaturesPerBox = 5;
     public override Size InputSize => ImageProcessor.RequiredSize;
     public YoloXDoubleNanoPoop()

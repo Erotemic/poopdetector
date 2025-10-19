@@ -53,7 +53,8 @@ public partial class VisionModelManager : ObservableObject
     }
     const string _defaultUrl =
     "https://github.com/mkorzunowicz/poop_models/raw/refs/heads/main/" +
-    "yolox_nano_poop_cropped_only_best.onnx";
+    "shitspotter_custom_v2_epoch126.onnx";
+    //"yolox_nano_poop_cropped_only_best.onnx";
 
     bool _bootstrapped;
 
@@ -107,8 +108,10 @@ public partial class VisionModelManager : ObservableObject
         {
             ModelTypes.YoloxNanoPoop =>
                 await ModelCache.GetAsync(
-                    "https://github.com/mkorzunowicz/poop_models/raw/refs/heads/main/yolox_nano_poop_cropped_only_best.onnx",
-                    "yolox_nano_poop_cropped_only_best.onnx", p, ct),
+                    //"https://github.com/mkorzunowicz/poop_models/raw/refs/heads/main/yolox_nano_poop_cropped_only_best.onnx",
+                    //"yolox_nano_poop_cropped_only_best.onnx", p, ct),
+                    "https://github.com/Erotemic/poop_models/raw/refs/heads/main/shitspotter_custom_v2_epoch126.onnx",
+                    "shitspotter_custom_v2_epoch126.onnx", p, ct),
 
             ModelTypes.YoloxNano =>
                 await ModelCache.GetAsync(

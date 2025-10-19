@@ -84,6 +84,7 @@
 		<None Remove="Resources\Raw\initialanimation.json" />
 		<None Remove="Resources\Raw\yolox_nano.onnx" />
 		<None Remove="Resources\Raw\yolox_nano_poop_cropped_only_best.onnx" />
+		<None Remove="Resources\Raw\shitspotter_custom_v2_epoch126.onnx" />
 	</ItemGroup>
 
 	<ItemGroup>
