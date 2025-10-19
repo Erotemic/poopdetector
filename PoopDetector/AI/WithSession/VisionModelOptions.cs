@@ -10,6 +10,7 @@ namespace PoopDetector.AI.Vision;
 internal sealed class VisionModelOptions
 {
     public string? RepositoryBaseUrl { get; set; }
+    public string? DefaultModel { get; set; }
     public Dictionary<string, string> RemoteOverrides { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public List<string> BundledModels { get; set; } = new();
 
