@@ -18,6 +18,10 @@ public partial class VisionModelManager : ObservableObject
         string? LegacyUrl = null);
 
     static readonly VisionModelOptions _options = VisionModelOptionsLoader.Load();
+
+    // Lookup table of supported models, this is where new models are added.
+    // Also see
+    // ../../appsettings.json
     static readonly IReadOnlyDictionary<ModelTypes, VisionModelDescriptor> _models =
         new Dictionary<ModelTypes, VisionModelDescriptor>
         {
